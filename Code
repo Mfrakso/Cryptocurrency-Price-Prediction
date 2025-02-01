@@ -1,0 +1,199 @@
+irst we will import the necessary Library 
+
+import os
+import pandas as pd
+import numpy as np
+import math
+import datetime as dt
+import matplotlib.pyplot as plt
+
+# For Evalution we will use these library
+
+from sklearn.metrics import mean_squared_error, mean_absolute_error, explained_variance_score, r2_score 
+from sklearn.metrics import mean_poisson_deviance, mean_gamma_deviance, accuracy_score
+from sklearn.preprocessing import MinMaxScaler
+
+# For model building we will use these library
+
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.layers import LSTM
+
+
+# For PLotting we will use these library
+
+import matplotlib.pyplot as plt
+from itertools import cycle
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
+
+# Load the uploaded CSV file to explore the data
+file_path = '/mnt/data/btc-usd-max.csv'
+crypto_data = pd.read_csv(file_path)
+
+# Display the first few rows of the dataset for initial inspection
+crypto_data.head(), crypto_data.info()
+
+# Re-import necessary libraries for LSTM modeling
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
+
+# Select only 'price' column for time-series forecasting
+price_data = crypto_data[['snapped_at', 'price']].set_index('snapped_at')
+
+# Normalize the price data
+scaler = MinMaxScaler(feature_range=(0, 1))
+price_scaled = scaler.fit_transform(price_data)
+
+# Create sequences for LSTM (lookback window of 60 days)
+def create_sequences(data, time_step=60):
+    X, y = [], []
+    for i in range(len(data) - time_step):
+        X.append(data[i:i+time_step])
+        y.append(data[i+time_step])
+    return np.array(X), np.array(y)
+
+time_step = 60
+X, y = create_sequences(price_scaled, time_step)
+
+# Split data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+
+# Reshape X to fit LSTM input (samples, time steps, features)
+X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
+X_test = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
+
+# Build the LSTM model
+model = Sequential([
+    LSTM(50, return_sequences=True, input_shape=(time_step, 1)),
+    Dropout(0.2),
+    LSTM(50, return_sequences=False),
+    Dropout(0.2),
+    Dense(25),
+    Dense(1)
+])
+
+# Compile the model
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+# Train the model
+history = model.fit(X_train, y_train, epochs=20, batch_size=32, validation_data=(X_test, y_test), verbose=1)
+
+# Predict on test data
+predictions = model.predict(X_test)
+predictions = scaler.inverse_transform(predictions)  # Convert back to original scale
+
+# Convert y_test back to original scale for comparison
+y_test_original = scaler.inverse_transform(y_test.reshape(-1, 1))
+
+# Plot actual vs predicted prices
+plt.figure(figsize=(12, 6))
+plt.plot(price_data.index[-len(y_test):], y_test_original, label="Actual Price", color='blue')
+plt.plot(price_data.index[-len(y_test):], predictions, label="Predicted Price", color='red')
+plt.title("Bitcoin Price Prediction Using LSTM")
+plt.xlabel("Date")
+plt.ylabel("Price (USD)")
+plt.legend()
+plt.show()
+
+
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 4276 entries, 0 to 4275
+Data columns (total 4 columns):
+ #   Column        Non-Null Count  Dtype  
+---  ------        --------------  -----  
+ 0   snapped_at    4276 non-null   object 
+ 1   price         4276 non-null   float64
+ 2   market_cap    4275 non-null   float64
+ 3   total_volume  4276 non-null   float64
+dtypes: float64(3), object(1)
+memory usage: 133.8+ KB
+Result
+(                snapped_at   price    market_cap  total_volume
+ 0  2013-04-28 00:00:00 UTC  135.30  1.500518e+09           0.0
+ 1  2013-04-29 00:00:00 UTC  141.96  1.575032e+09           0.0
+ 2  2013-04-30 00:00:00 UTC  135.30  1.501657e+09           0.0
+ 3  2013-05-01 00:00:00 UTC  117.00  1.298952e+09           0.0
+ 4  2013-05-02 00:00:00 UTC  103.43  1.148668e+09           0.0,
+ None)
+
+
+# Re-import necessary libraries and reload the CSV file
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Load the re-uploaded file
+file_path = '/mnt/data/btc-usd-max.csv'
+crypto_data = pd.read_csv(file_path)
+
+# Convert 'snapped_at' to datetime and handle missing values in 'market_cap'
+crypto_data['snapped_at'] = pd.to_datetime(crypto_data['snapped_at'], errors='coerce')
+crypto_data['market_cap'].fillna(crypto_data['market_cap'].median(), inplace=True)
+
+# Add year, month, and day of the week columns for seasonal analysis
+crypto_data['year'] = crypto_data['snapped_at'].dt.year
+crypto_data['month'] = crypto_data['snapped_at'].dt.month
+crypto_data['day_of_week'] = crypto_data['snapped_at'].dt.day_name()
+
+# Seasonal analysis: Monthly average price trend
+monthly_avg = crypto_data.groupby(['year', 'month'])['price'].mean().reset_index()
+monthly_avg['date'] = pd.to_datetime(monthly_avg[['year', 'month']].assign(day=1))
+
+plt.figure(figsize=(12, 6))
+sns.lineplot(x='date', y='price', data=monthly_avg, color='blue')
+plt.title("Seasonal Trend: Monthly Average Price")
+plt.xlabel("Date")
+plt.ylabel("Average Price (USD)")
+plt.xticks(rotation=45)
+plt.show()
+
+# Day of the week analysis: Average price by day of the week
+day_of_week_avg = crypto_data.groupby('day_of_week')['price'].mean().reindex(
+    ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+)
+
+plt.figure(figsize=(10, 6))
+sns.barplot(x=day_of_week_avg.index, y=day_of_week_avg.values, palette="coolwarm")
+plt.title("Average Price by Day of the Week")
+plt.xlabel("Day of the Week")
+plt.ylabel("Average Price (USD)")
+plt.show()
+
+# Outlier detection using boxplots
+plt.figure(figsize=(16, 8))
+plt.subplot(1, 3, 1)
+sns.boxplot(y=crypto_data['price'], color='blue')
+plt.title("Price Outliers")
+
+plt.subplot(1, 3, 2)
+sns.boxplot(y=crypto_data['market_cap'], color='green')
+plt.title("Market Cap Outliers")
+
+plt.subplot(1, 3, 3)
+sns.boxplot(y=crypto_data['total_volume'], color='red')
+plt.title("Total Volume Outliers")
+
+plt.tight_layout()
+plt.show()
+
+# Checking for extreme outliers using IQR method
+def detect_outliers(column):
+    Q1 = crypto_data[column].quantile(0.25)
+    Q3 = crypto_data[column].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    return crypto_data[(crypto_data[column] < lower_bound) | (crypto_data[column] > upper_bound)]
+
+outliers_price = detect_outliers('price')
+outliers_market_cap = detect_outliers('market_cap')
+outliers_volume = detect_outliers('total_volume')
+
+len(outliers_price), len(outliers_market_cap), len(outliers_volume)
